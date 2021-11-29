@@ -1,0 +1,127 @@
+#ssh -Y ubuntu@134.158.247.54
+#snakemake -—use-singularity
+#
+#variables pour obtenir tous les chromosomes et samples.
+SAMPLES=["SRR62858"+str(i) for i in range(2,10)]
+INDEX=["1", "2"]
+CHROM=[str(i) for i in range(1,23)]+["MT"]+["X"]+["Y"]
+
+rule all:
+    input:
+        expand(["{sample}_{index}.fastq", "chromosomes/{chromosome}.fa.gz", "{sample}.counts"],chromosome=CHROM,sample=SAMPLES,index=INDEX), "Rout.txt"
+
+#téléchargement des reads au format fastQ.
+rule downloadFastq:
+	output:
+        	"{sample}_{index}.fastq"
+	shell:
+ 		"""
+		wget -O {output}.gz ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR628/{wildcards.sample}/{output}.gz
+        gunzip {output}.gz
+		"""
+
+#téléchargement des chromosomes
+rule downloadChromosomes:
+    output:
+        "chromosomes/{chromosome}.fa.gz"
+    shell:
+        """
+        wget -O {output} ftp://ftp.ensembl.org/pub/release-104/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.chromosome.{wildcards.chromosome}.fa.gz
+        """
+
+#decompressage et concaténation
+rule gunzipGenome:
+    input:
+        expand("chromosomes/{chromosome}.fa.gz",chromosome=CHROM)
+    output:
+        "genome/genome.fa"
+    shell: #-c + chevron concatène automatiquement
+        """
+        gunzip -c chromosomes/*.fa.gz > {output}
+        """
+
+#indexation du génome
+rule indexGenome:
+	input:
+		"genome/genome.fa"
+	output:
+		"genome/SAindex"
+	singularity:
+		"docker://evolbioinfo/star:v2.7.6a"
+	threads:
+		16
+	shell:
+		"STAR --runThreadN {threads} --runMode genomeGenerate --genomeDir genome/ --genomeFastaFiles {input}"
+
+#mapping part 1
+rule mappingStar:
+	input:
+        	index="genome/SAindex",
+        	sample1="{sample}_1.fastq",
+        	sample2="{sample}_2.fastq"
+	output:
+		"{sample}.bam"
+	singularity:
+		"docker://evolbioinfo/star:v2.7.6a"
+	threads:
+		8
+	shell:
+		"""
+        STAR --outSAMstrandField intronMotif \
+        --outFilterMismatchNmax 4 \
+        --outFilterMultimapNmax 10 \
+        --genomeDir genome \
+        --readFilesIn {input.sample1} {input.sample2} \
+        --runThreadN {threads} \
+        --outSAMunmapped None \
+        --outSAMtype BAM SortedByCoordinate \
+        --outStd BAM_SortedByCoordinate \
+        --genomeLoad NoSharedMemory \
+        --outFileNamePrefix {wildcards.sample} --limitBAMsortRAM 30000000000 > {output}
+        """
+
+#mapping part 2
+rule mappingSamTools:
+	input:
+		"{sample}.bam"
+	output:
+		"{sample}.bam.bai"
+	singularity:
+		"docker://evolbioinfo/samtools:v1.11"
+	shell:
+		"samtools index {input}"
+
+#annotation
+rule annotGenome:
+	output:
+        	"genomeH.gtf"
+	shell:
+ 		"""
+		wget -O {output}.gz ftp://ftp.ensembl.org/pub/release-101/gtf/homo_sapiens/Homo_sapiens.GRCh38.101.chr.gtf.gz
+        gunzip {output}.gz
+		"""
+
+#comptage
+rule featureCounts:
+    input:
+        bai="{sample}.bam.bai",
+        bam="{sample}.bam",
+        genome="genomeH.gtf"
+    output:
+        "{sample}.counts"
+    singularity:
+        "docker://evolbioinfo/subread:v2.0.1"
+    threads:
+        4
+    shell:
+        "featureCounts -T {threads} -t gene -g gene_id -s 0 -a {input.genome} -o {output} {input.bam}"
+
+#on pourra remplacer gene par exon pour comparer
+#
+rule Stats:
+    input : expand("{sample}.counts",sample = SAMPLES)
+    output : "Rout.txt"
+    singularity:
+        "docker://evolbioinfo/deseq2:v1.28.1"
+    script:
+        "script_R.R"
