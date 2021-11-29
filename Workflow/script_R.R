@@ -1,10 +1,10 @@
-# Charger les librairies :
+# Charger des librairies(ggplot2 est installée avec DESeq2, puisque DESeq2 lui fait appel) :
 library("DESeq2")
 library("ggplot2")
-###### Recuperer le chemin (où s'exécute le script et où sont les fichiers dont on a besoin)
+# Acquisition du chemin actuel
 dir = getwd()
 setwd(dir)
-
+# Récupération des séquences d'ARN en tant que colonnes de la matrice de compte
 ind1 = read.table(snakemake@input[[1]])
 ind2 = read.table(snakemake@input[[2]])
 ind3 = read.table(snakemake@input[[3]])
@@ -14,37 +14,41 @@ ind6 = read.table(snakemake@input[[6]])
 ind7 = read.table(snakemake@input[[7]])
 ind8 = read.table(snakemake@input[[8]])
 
-###### récupération des dernières colonnes et conversion en numeric :
+# Suppression des noms et conversion en numeric :
 counts = data.frame(as.numeric(ind1[-1,7]), as.numeric(ind2[-1,7]), as.numeric(ind3[-1,7])
                    , as.numeric(ind4[-1,7]), as.numeric(ind5[-1,7]), as.numeric(ind6[-1,7]),   
                    as.numeric(ind7[-1,7]),as.numeric(ind8[-1,7]))
 
+#construction de la matrice de compte :
 counts = as.matrix(counts)
 
-###### recuperation au format data.frame des labels :
+# construction des dataframe de labels :
 labels = c("SRR628582", "SRR628583", "SRR628584", "SRR628585", "SRR628586", "SRR628587", "SRR628588", "SRR628589")
 type = c("M", "M", "WT", "WT", "WT", "WT", "WT","M")
 labels2 = data.frame(labels, type)
 rowlabels = ind1[-1,1]
 
-###### ajout des labels des colonnes et lignes de la matrice :
+# ajout des labels des colonnes et lignes de la matrice :
 rownames(counts)=rowlabels
 colnames(counts) = labels
 
-###### summary :
+# affichage des premières lignes de la matrice de counts
 head(counts)
 
-###### Affichage d'une première ACP avec tous les individus :  
+# Affichage d'une première ACP avec tous les individus :  
 
 dds = DESeqDataSetFromMatrix(countData = counts, colData = labels2, ~type)
 dds2 = DESeq(dds)
 res <- results(dds2)
-resLFC <- lfcShrink(dds2, coef = 2, type="normal")
-vsd <- vst(dds, blind=FALSE)
+resLFC <- lfcShrink(dds2, coef = 2, type="normal") #réduction normale des données, pour éliminer le bruit
+#vsd <- vst(dds, blind=FALSE) #autre normalisation
 rld <- rlog(dds, blind=FALSE) #normalisation rlog
+
+# Affichage d'une première ACP avec tous les individus : 
 pcaData <- plotPCA(rld, intgroup=c("type"), returnData=TRUE) 
 percentVar <- round(100 * attr(pcaData, "percentVar"))
-ggplot(pcaData, aes(PC1, PC2, color=type)) + #construction du graphique
+
+ggplot(pcaData, aes(PC1, PC2, color=type)) + #paramétrages du graphique
   geom_point(size=3) +
   geom_text(
     label=labels, 

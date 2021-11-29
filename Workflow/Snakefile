@@ -6,7 +6,8 @@ SAMPLES=["SRR62858"+str(i) for i in range(2,10)]
 INDEX=["1", "2"]
 CHROM=[str(i) for i in range(1,23)]+["MT"]+["X"]+["Y"]
 
-rule all:
+#rule all, qui récupère en input les différents fichiers créés ou téléchargés
+rule all
     input:
         expand(["{sample}_{index}.fastq", "chromosomes/{chromosome}.fa.gz", "{sample}.counts"],chromosome=CHROM,sample=SAMPLES,index=INDEX), "Rout.txt"
 
@@ -116,8 +117,7 @@ rule featureCounts:
     shell:
         "featureCounts -T {threads} -t gene -g gene_id -s 0 -a {input.genome} -o {output} {input.bam}"
 
-#on pourra remplacer gene par exon pour comparer
-#
+#Analyse statistique avec Deseq2. L'output est un fichier texte contenant la sous matrice des gènes avec une p-value < 0.05
 rule Stats:
     input : expand("{sample}.counts",sample = SAMPLES)
     output : "Rout.txt"
