@@ -5,7 +5,7 @@
 # donatien.lege@agroparistech.fr
 # mathilde.guyot@agroparistech.fr
 # matthieu.vercaemer@agroparistech.fr
-# anthony.boutard@agroparistech.fr
+# anthony.boutard@universite-paris-saclay.fr
 
 # Si vous souhaitez lancer notre pipeline suivez les instructions suivantes :
 
